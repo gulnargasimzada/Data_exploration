@@ -1,0 +1,246 @@
+---
+title: "Data exploration"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyverse)
+library(quanteda)
+library(quanteda.textstats)
+library(udpipe)
+```
+
+```{r}
+# 1. Identify all text files in the working directory
+files <- list.files(pattern = "\\.txt$", full.names = TRUE)
+
+# Verify corpus size 
+cat("Total files found:", length(files), "\n")
+
+# 2. Ingest texts into a structured tibble and normalize Early Modern typography
+corpus_df <- tibble(file_path = files) %>%
+  mutate(
+    # Extract document identifier from filename (without extension)
+    doc_id = tools::file_path_sans_ext(basename(file_path)),
+    # Read text content
+    text_raw = map_chr(file_path, ~ read_file(.x)),
+    
+    # REQUIRED STEP: Normalize the Early Modern long S character ('ſ' -> 's')
+    text_clean = str_replace_all(text_raw, "ſ", "s")
+  )
+
+# 3. Verification: Ensure all long S characters are eliminated
+cat("Remaining long S count:", sum(str_count(corpus_df$text_clean, "ſ")), "(expected: 0)\n")
+```
+
+```{r approach1-tfidf, message=FALSE, warning=FALSE}
+# ==============================================================================
+# Approach 1: TF-IDF Lexical Distinctiveness
+# ==============================================================================
+
+# 1. Build a quanteda corpus from cleaned texts
+corp <- corpus(corpus_df, docid_field = "doc_id", text_field = "text_clean")
+
+# 2. Tokenize: lowercase, remove punctuation, numbers, symbols, and standard English stopwords
+toks <- tokens(corp, 
+               remove_punct = TRUE, 
+               remove_numbers = TRUE, 
+               remove_symbols = TRUE) %>%
+  tokens_tolower() %>%
+  tokens_remove(stopwords("en"))
+
+# 3. Construct Document-Feature Matrix (DFM) and compute TF-IDF weights
+dfm_counts <- dfm(toks)
+dfm_tfidf_mat <- dfm_tfidf(dfm_counts)
+
+# 4. Extract top 10 distinctive terms for each document
+top_terms_list <- list()
+
+for (doc in docnames(dfm_tfidf_mat)) {
+  # Sort features by TF-IDF weight descending
+  sorted_weights <- sort(as.matrix(dfm_tfidf_mat[doc, ])[1, ], decreasing = TRUE)
+  top10 <- head(sorted_weights, 10)
+  
+  top_terms_list[[doc]] <- tibble(
+    doc_id = doc,
+    rank = 1:10,
+    term = names(top10),
+    tfidf = round(as.numeric(top10), 3)
+  )
+}
+
+# Combine into a single tidy dataframe
+top_tfidf_df <- bind_rows(top_terms_list)
+
+# Reshape into a wide comparison table (Documents as rows, Top terms 1-10 as columns)
+top_terms_wide <- top_tfidf_df %>%
+  select(doc_id, rank, term) %>%
+  pivot_wider(names_from = rank, names_prefix = "top_", values_from = term)
+
+# Display the top distinctive terms table
+print(top_terms_wide, n = 23)
+```
+
+```{r approach2-pearson-heatmap, fig.width=10, fig.height=8, message=FALSE, warning=FALSE}
+# ==============================================================================
+# Approach 2: Pearson Correlation and Similarity Heatmap
+# ==============================================================================
+
+# 1. Trim very rare terms (min_termfreq = 5) to mitigate typographical/OCR noise
+dfm_trimmed <- dfm_trim(dfm_counts, min_termfreq = 5)
+
+# 2. Pairwise Pearson correlations between all documents
+sim_r <- textstat_simil(dfm_trimmed, margin = "documents", method = "correlation")
+
+# Convert similarity object to matrix and round for visual clarity
+r_mat <- round(as.matrix(sim_r), 3)
+
+# 3. Reshape correlation matrix to long format for ggplot
+heat_df <- as.data.frame(r_mat) %>%
+  rownames_to_column("doc_i") %>%
+  pivot_longer(-doc_i, names_to = "doc_j", values_to = "r")
+
+# 4. Create the similarity heatmap
+ggplot(heat_df, aes(x = doc_j, y = doc_i, fill = r)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    limits = c(-1, 1)
+  ) +
+  labs(
+    title = "Pearson Correlation Between Documents",
+    x = NULL,
+    y = NULL,
+    fill = "Correlation"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y = element_text(size = 8),
+    panel.grid = element_blank()
+  )
+
+# 5. Extract the Two Most Similar and Two Least Similar Document Pairs
+# Filter out self-correlations (doc_i == doc_j) and avoid duplicate symmetrical pairs
+pairs_df <- heat_df %>%
+  filter(doc_i < doc_j) %>%
+  arrange(desc(r))
+
+cat("--- Top 2 Most Similar Document Pairs ---\n")
+print(head(pairs_df, 2))
+
+cat("\n--- Top 2 Least Similar Document Pairs ---\n")
+print(tail(pairs_df, 2))
+```
+
+```{r approach3-setup, message=FALSE, warning=FALSE}
+# ==============================================================================
+# Approach 3 - Step 1: Model Setup & Document Filtering
+# ==============================================================================
+
+library(udpipe)
+
+# 1. Download and load English UDPipe language model
+udmodel <- udpipe_download_model(language = "english-ewt")
+udmodel <- udpipe_load_model(udmodel$file_model)
+
+# 2. Filter corpus for the least similar document pair (r = 0.170)
+selected_docs <- corpus_df %>%
+  filter(doc_id %in% c("A93819", "B14801__Free_Trade"))
+
+# Check selected documents
+selected_docs %>% select(doc_id)
+```
+```{r approach3-parsing, message=FALSE, warning=FALSE}
+# ==============================================================================
+# Approach 3 - Step 2: Dependency Parsing
+# ==============================================================================
+
+# Annotate texts using dependency parsing
+annotated_texts <- udpipe_annotate(
+  udmodel, 
+  x = selected_docs$text_clean, 
+  doc_id = selected_docs$doc_id
+) %>%
+  as.data.frame()
+
+# Quick inspection of parsed tokens
+head(annotated_texts %>% select(doc_id, sentence_id, token, upos, dep_rel), 10)
+```
+
+```{r approach3-metrics, message=FALSE, warning=FALSE}
+# ==============================================================================
+# Approach 3 - Step 3: Compute Week 05 Complexity Metrics
+# ==============================================================================
+
+syntactic_summary <- annotated_texts %>%
+  group_by(doc_id) %>%
+  summarize(
+    num_sentences = n_distinct(sentence_id),
+    num_words = sum(!upos %in% c("PUNCT", "SYM")),
+    
+    # Clause heads
+    num_clauses = sum(dep_rel %in% c("root", "conj", "advcl", "acl", "ccomp", "xcomp") & 
+                        upos %in% c("VERB", "AUX")),
+    
+    # Dependent clauses
+    num_dep_clauses = sum(dep_rel %in% c("advcl", "acl", "ccomp", "xcomp")),
+    
+    # Coordination
+    num_coordination = sum(dep_rel %in% c("conj", "cc")),
+    
+    # Complex nominals
+    num_complex_nominals = sum(dep_rel %in% c("compound", "nmod", "amod") & 
+                                 upos %in% c("NOUN", "ADJ")),
+    
+    # --- Normalized Metrics ---
+    MLS = round(num_words / num_sentences, 2),
+    C_S = round(num_clauses / num_sentences, 2),
+    DC_S = round(num_dep_clauses / num_sentences, 2),
+    Coord_S = round(num_coordination / num_sentences, 2),
+    CN_S = round(num_complex_nominals / num_sentences, 2)
+  )
+
+# Display required summary table
+print(syntactic_summary %>% select(doc_id, MLS, C_S, DC_S, Coord_S, CN_S))
+```
+```{r approach3-examples, message=FALSE, warning=FALSE}
+# ==============================================================================
+# Approach 3 - Step 4: Extract Illustrative Sentences
+# ==============================================================================
+
+example_sentences <- annotated_texts %>%
+  filter(!upos %in% c("PUNCT", "SYM")) %>%
+  group_by(doc_id, sentence_id, sentence) %>%
+  summarize(sentence_length = n(), .groups = "drop") %>%
+  group_by(doc_id) %>%
+  slice_max(sentence_length, n = 1) %>%
+  ungroup()
+
+for(i in 1:nrow(example_sentences)) {
+  cat("\n=======================================================\n")
+  cat("Document:", example_sentences$doc_id[i], "\n")
+  cat("Word Count:", example_sentences$sentence_length[i], "\n")
+  cat("Sentence Text:\n", example_sentences$sentence[i], "\n")
+}
+```
+
+
+
+
+
+
+
+
+
+
+
