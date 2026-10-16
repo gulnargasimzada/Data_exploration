@@ -1,0 +1,24 @@
+"0","# =============================================================================="
+"0","# Approach 3 - Step 1: Model Setup & Document Filtering"
+"0","# =============================================================================="
+"0",""
+"0","library(udpipe)"
+"0",""
+"0","# 1. Download and load English UDPipe language model"
+"0","udmodel <- udpipe_download_model(language = ""english-ewt"")"
+"2","trying URL 'https://raw.githubusercontent.com/jwijffels/udpipe.models.ud.2.5/master/inst/udpipe-ud-2.5-191206/english-ewt-ud-2.5-191206.udpipe'
+"
+"2","Content type 'application/octet-stream'"
+"2"," length 16309608 bytes (15.6 MB)
+"
+"2","downloaded 15.6 MB
+
+"
+"0","udmodel <- udpipe_load_model(udmodel$file_model)"
+"0",""
+"0","# 2. Filter corpus for the least similar document pair (r = 0.170)"
+"0","selected_docs <- corpus_df %>%"
+"0","  filter(doc_id %in% c(""A93819"", ""B14801__Free_Trade""))"
+"0",""
+"0","# Check selected documents"
+"0","selected_docs %>% select(doc_id)"

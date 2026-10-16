@@ -1,0 +1,36 @@
+"0",""
+"0","# 5. Extract the Two Most Similar and Two Least Similar Document Pairs"
+"0","# Filter out self-correlations (doc_i == doc_j) and avoid duplicate symmetrical pairs"
+"0","pairs_df <- heat_df %>%"
+"0","  filter(doc_i < doc_j) %>%"
+"0","  arrange(desc(r))"
+"0",""
+"0","cat(""--- Top 2 Most Similar Document Pairs ---\n"")"
+"1","--- Top 2 Most Similar Document Pairs ---
+"
+"0","print(head(pairs_df, 2))"
+"1","[38;5;246m# A tibble: 2 × 3[39m
+"
+"1","  doc_i  doc_j      r
+"
+"1","  [3m[38;5;246m<chr>[39m[23m  [3m[38;5;246m<chr>[39m[23m  [3m[38;5;246m<dbl>[39m[23m
+"
+"1","[38;5;250m1[39m A32827 A32833 1    
+"
+"1","[38;5;250m2[39m A32836 A50763 0.983
+"
+"0","cat(""\n--- Top 2 Least Similar Document Pairs ---\n"")"
+"1","
+--- Top 2 Least Similar Document Pairs ---
+"
+"0","print(tail(pairs_df, 2))"
+"1","[38;5;246m# A tibble: 2 × 3[39m
+"
+"1","  doc_i  doc_j                  r
+"
+"1","  [3m[38;5;246m<chr>[39m[23m  [3m[38;5;246m<chr>[39m[23m              [3m[38;5;246m<dbl>[39m[23m
+"
+"1","[38;5;250m1[39m A06791 A93819             0.172
+"
+"1","[38;5;250m2[39m A93819 B14801__Free_Trade 0.17 
+"

@@ -1,0 +1,31 @@
+library(tidyverse)
+library(quanteda)
+library(quanteda.textstats)
+library(udpipe)
+
+# ==============================================================================
+# Step 0: Corpus Ingestion and Typography Normalization
+# ==============================================================================
+
+# 1. Identify all text files in the working directory
+files <- list.files(pattern = "\\.txt$", full.names = TRUE)
+
+# Verify corpus size 
+length(files)
+
+# 2. Read texts into a structured tibble and normalize typography
+corpus_df <- tibble(file_path = files) %>%
+  mutate(
+    # Extract document identifier from filename (without .txt extension)
+    doc_id = tools::file_path_sans_ext(basename(file_path)),
+    # Read raw text content using UTF-8 encoding
+    text_raw = map_chr(file_path, ~ read_file(.x)),
+    
+    # REQUIRED STEP: Normalize the Early Modern long S character ('ſ' -> 's')
+    text_clean = str_replace_all(text_raw, "ſ", "s")
+  )
+
+# 3. Quality check: Ensure all long S characters are replaced (expected: 0)
+sum(str_count(corpus_df$text_clean, "ſ"))
+
+

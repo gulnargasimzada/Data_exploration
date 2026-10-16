@@ -1,0 +1,97 @@
+"0","# =============================================================================="
+"0","# Approach 1: TF-IDF Lexical Distinctiveness"
+"0","# =============================================================================="
+"0",""
+"0","# 1. Build a quanteda corpus from cleaned texts"
+"0","corp <- corpus(corpus_df, docid_field = ""doc_id"", text_field = ""text_clean"")"
+"0",""
+"0","# 2. Tokenize: lowercase, remove punctuation, numbers, symbols, and standard English stopwords"
+"0","toks <- tokens(corp, "
+"0","               remove_punct = TRUE, "
+"0","               remove_numbers = TRUE, "
+"0","               remove_symbols = TRUE) %>%"
+"0","  tokens_tolower() %>%"
+"0","  tokens_remove(stopwords(""en""))"
+"0",""
+"0","# 3. Construct Document-Feature Matrix (DFM) and compute TF-IDF weights"
+"0","dfm_counts <- dfm(toks)"
+"0","dfm_tfidf_mat <- dfm_tfidf(dfm_counts)"
+"0",""
+"0","# 4. Extract top 10 distinctive terms for each document"
+"0","top_terms_list <- list()"
+"0",""
+"0","for (doc in docnames(dfm_tfidf_mat)) {"
+"0","  # Sort features by TF-IDF weight descending"
+"0","  sorted_weights <- sort(as.matrix(dfm_tfidf_mat[doc, ])[1, ], decreasing = TRUE)"
+"0","  top10 <- head(sorted_weights, 10)"
+"0","  "
+"0","  top_terms_list[[doc]] <- tibble("
+"0","    doc_id = doc,"
+"0","    rank = 1:10,"
+"0","    term = names(top10),"
+"0","    tfidf = round(as.numeric(top10), 3)"
+"0","  )"
+"0","}"
+"0",""
+"0","# Combine into a single tidy dataframe"
+"0","top_tfidf_df <- bind_rows(top_terms_list)"
+"0",""
+"0","# Reshape into a wide comparison table (Documents as rows, Top terms 1-10 as columns)"
+"0","top_terms_wide <- top_tfidf_df %>%"
+"0","  select(doc_id, rank, term) %>%"
+"0","  pivot_wider(names_from = rank, names_prefix = ""top_"", values_from = term)"
+"0",""
+"0","# Display the top distinctive terms table"
+"0","print(top_terms_wide, n = 23)"
+"1","[38;5;246m# A tibble: 23 × 11[39m
+"
+"1","   doc_id                     top_1       top_2      top_3       top_4   top_5 top_6 top_7 top_8 top_9 top_10
+"
+"1","   [3m[38;5;246m<chr>[39m[23m                      [3m[38;5;246m<chr>[39m[23m       [3m[38;5;246m<chr>[39m[23m      [3m[38;5;246m<chr>[39m[23m       [3m[38;5;246m<chr>[39m[23m   [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<chr>[39m[23m [3m[38;5;246m<chr>[39m[23m 
+"
+"1","[38;5;250m 1[39m A06785                     moneys      misselden  starlin     p       exch… circ… realm doll… unde… royals
+"
+"1","[38;5;250m 2[39m A06786                     ll          hundreth   ounces      weight  carr… mone… ss    fact… assu… grains
+"
+"1","[38;5;250m 3[39m A06788                     m           sols       silver      livers  realm dear… comm… gold  bodi… price 
+"
+"1","[38;5;250m 4[39m A06789                     moneys      starlin    monies      exchan… realm comm… shil… doll… th    enhan…
+"
+"1","[38;5;250m 5[39m A06790                     monster     dragon     maketh      moon    unto  tail  ass   sweet caus… leagu…
+"
+"1","[38;5;250m 6[39m A06791                     realm       moneys     commodities exchan… fine… price shil… silv… exch… albeit
+"
+"1","[38;5;250m 7[39m A07594__Circle_of_Commerce haue        malynes    hee         kingdo… mony  ball… forr… bee   vpon  owne  
+"
+"1","[38;5;250m 8[39m A07886                     wares       raw-silkes realm       indigo  indi… alep… raws… india year… ll    
+"
+"1","[38;5;250m 9[39m A32827                     plantations abatement  cent        new-en… poor  usury inte… engl… 2dly  newfo…
+"
+"1","[38;5;250m10[39m A32828                     support     mortgage   disposal    purely  prom… impe… comm… adva… cred… there…
+"
+"1","[38;5;250m11[39m A32829                     packs       stuffs     cloth       wool    broa… merc… manu… fore… thou… growe…
+"
+"1","[38;5;250m12[39m A32830                     taffities   muslins    em          product india etc   prime pers… impr… expen…
+"
+"1","[38;5;250m13[39m A32833                     plantations abatement  cent        new-en… poor  usury inte… engl… newf… 2dly  
+"
+"1","[38;5;250m14[39m A32836                     poor        parish     fathers     propose hosp… pious asse… ques… quest elect…
+"
+"1","[38;5;250m15[39m A32837                     cent        usurer     usurers     per     l     barb… obje… plan… rich… plant…
+"
+"1","[38;5;250m16[39m A32838                     surrat      phirmaund  mogul       bombay  mogu… guns  india engl… mary  commi…
+"
+"1","[38;5;250m17[39m A32839                     tuns        east-india seamen      protes… arg   india char… beng… comp… regul…
+"
+"1","[38;5;250m18[39m A50763                     poor        parish     fathers     goals   prop… hosp… asse… desi… comm… elect…
+"
+"1","[38;5;250m19[39m A51598                     wares       treasure   genova      foreign mone… war   wher… realm exch… gain  
+"
+"1","[38;5;250m20[39m A69858                     india       surrat     arg         answ    east… bant… tuns  comp… o     l     
+"
+"1","[38;5;250m21[39m A93819                     lion-key    stairs     edmond      wiseman key   defe… whar… lond… surv… thames
+"
+"1","[38;5;250m22[39m B14801__Free_Trade         haue        kingdome   vpon        common… forr… goue… maie… non-… alph… subie…
+"
+"1","[38;5;250m23[39m wealth                     labor       however    capital     revenue expe… syst… prod… prod… diff… centu…
+"
